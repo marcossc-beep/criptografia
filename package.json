@@ -1,0 +1,22 @@
+{
+  "name": "nome_sobrenome_saep2026",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node --watch server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/jwt": "^10.2.2",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^18.0.5",
+    "fastify": "^5.8.5",
+    "pg": "^8.21.0"
+  }
+}

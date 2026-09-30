@@ -1,0 +1,473 @@
+// ### Introdução à Criptografia e Segurança na API
+
+// Nunca devemos guardar senhas em texto puro dentro do banco de dados.
+// Se o banco for vazado ou invadido, as senhas de todos os usuários estariam expostas.
+// Para resolver isso, usamos duas tecnologias essenciais: Bcrypt para proteger senhas e JWT para autenticação.
+
+// ### O que é o Bcrypt e como funciona o Hash?
+
+// Criptografia Tradicional x Hash:
+// - Criptografia tradicional: É bidirecional (dá para criptografar e depois descriptografar com uma chave).
+// - Hash (Bcrypt): É unidirecional (de via única). Depois que a senha vira um Hash, é IMPOSSÍVEL reverter para o texto original.
+
+// O que é o Salt?
+// O Salt é uma string aleatória adicionada à senha antes de gerar o Hash.
+// Isso garante que mesmo se dois usuários usarem a mesma senha ("123456"), os Hashes salvos no banco serão totalmente diferentes.
+
+import bcrypt from 'bcrypt'
+
+// Gerando o Hash da senha no cadastro:
+const salt = 10
+const senhaHash = await bcrypt.hash(body.senha, salt)
+
+// Como comparar a senha enviada no Login com o Hash do banco:
+// O bcrypt não descriptografa o banco. Ele pega a senha digitada no login, aplica o mesmo algoritmo e compara se o resultado é idêntico.
+const senhaValida = await bcrypt.compare(body.senha, usuario.rows[0].senha)
+
+// ### O que é JWT (JSON Web Token)?
+
+// O JWT é um token digital gerado pelo servidor após o login bem-sucedido.
+// Esse token é enviado para o frontend e serve como um "crachá" de identificação do usuário nas próximas requisições.
+
+// Estrutura de um Token JWT:
+// Um token é composto por 3 partes divididas por ponto (.):
+// 1. Header: Contém o tipo do token e o algoritmo de criptografia.
+// 2. Payload: Guarda os dados do usuário (ex: id e email). NUNCA guarde a senha no Payload!
+// 3. Signature: A assinatura digital que garante que o token não foi alterado por ninguém.
+
+// Registro do plugin no Fastify:
+import jwt from '@fastify/jwt'
+
+servidor.register(jwt, {
+    secret: process.env.JWT_SECRET, // Chave secreta usada para assinar o token
+    sign: { expiresIn: '1h' } // Tempo de validade do token (ex: 1 hora)
+})
+
+// Gerando o Token JWT no Login:
+const token = servidor.jwt.sign({
+    id: usuario.rows[0].id,
+    email: usuario.rows[0].email
+})
+
+// ### Exemplo de Cadastro de Usuário encriptando a senha com Bcrypt:
+
+servidor.post('/usuarios', async (request, reply) => {
+    const body = request.body
+
+    if (!body || !body.nome || !body.email || !body.senha) {
+        return reply.status(400).send({ message: "nome, email e senha são obrigatórios!" })
+    }
+
+    const salt = 10
+    const senhaHash = await bcrypt.hash(body.senha, salt)
+
+    await sql.query('INSERT INTO usuario (nome, email, senha) VALUES ($1, $2, $3)', [body.nome, body.email, senhaHash])
+    reply.status(201).send({ message: 'Usuário Criado!' })
+})
+
+// ### Exemplo de Login verificando a senha com Bcrypt e gerando Token JWT:
+
+servidor.post('/login', async (request, reply) => {
+    const body = request.body
+
+    if (!body || !body.email || !body.senha) {
+        return reply.status(400).send({ error: "email e senha obrigatórios!" })
+    }
+
+    const usuario = await sql.query('select * from usuario where email = $1', [body.email])
+
+    if (usuario.rows.length === 0) {
+        return reply.status(401).send({ message: "Usuário ou senha inválidos!", login: false })
+    }
+
+    const senhaValida = await bcrypt.compare(body.senha, usuario.rows[0].senha)
+
+    if (senhaValida) {
+        const token = servidor.jwt.sign({
+            id: usuario.rows[0].id,
+            email: usuario.rows[0].email
+        })
+        reply.status(200).send({ message: "usuario logado", token })
+    } else {
+        reply.status(401).send({ message: "Usuário ou senha inválidos!", login: false })
+    }
+})
+
+
+BACKEND:
+
+
+1. SQL.txt ou Executar no Postgres
+
+CREATE TABLE usuario (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    senha VARCHAR(255) NOT NULL
+);
+
+2. .env
+
+DB_USER=postgres
+DB_PASSWORD=senai
+DB_DATABASE=receitas
+JWT_SECRET=minhachavesegreta123
+
+3. server.js
+
+import Fastify from 'fastify'
+import { Pool } from 'pg'
+import cors from '@fastify/cors'
+import dotenv from 'dotenv'
+import jwt from '@fastify/jwt'
+import bcrypt from 'bcrypt'
+
+dotenv.config()
+
+const sql = new Pool({
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    host: "localhost",
+    port: 5432,
+    database: process.env.DB_DATABASE
+})
+
+const servidor = Fastify()
+
+servidor.register(cors, {
+    origin: '*',
+    methods: ['PUT', 'POST', 'DELETE', 'GET']
+})
+
+servidor.register(jwt, {
+    secret: process.env.JWT_SECRET,
+    sign: { expiresIn: '1h' }
+})
+
+servidor.get('/usuarios', async (request, reply) => {
+    const resultado = await sql.query('select * from usuario')
+    return resultado.rows
+})
+
+servidor.post('/usuarios', async (request, reply) => {
+    const body = request.body
+
+    if (!body || !body.nome || !body.email || !body.senha) {
+        return reply.status(400).send({ message: "nome, email e senha são obrigatórios!" })
+    }
+
+    const salt = 10
+    const senhaHash = await bcrypt.hash(body.senha, salt)
+
+    await sql.query('INSERT INTO usuario (nome, email, senha) VALUES ($1, $2, $3)', [body.nome, body.email, senhaHash])
+    reply.status(201).send({ message: 'Usuário Criado!' })
+})
+
+servidor.post('/login', async (request, reply) => {
+    const body = request.body
+
+    if (!body || !body.email || !body.senha) {
+        return reply.status(400).send({ error: "email e senha obrigatórios!" })
+    }
+
+    const usuario = await sql.query('select * from usuario where email = $1', [body.email])
+
+    if (usuario.rows.length === 0) {
+        return reply.status(401).send({ message: "Usuário ou senha inválidos!", login: false })
+    }
+
+    const senhaValida = await bcrypt.compare(body.senha, usuario.rows[0].senha)
+
+    if (senhaValida) {
+        const token = servidor.jwt.sign({
+            id: usuario.rows[0].id,
+            email: usuario.rows[0].email
+        })
+        reply.status(200).send({ message: "usuario logado", token })
+    } else {
+        reply.status(401).send({ message: "Usuário ou senha inválidos!", login: false })
+    }
+})
+
+servidor.put('/usuarios/:id', async (request, reply) => {
+    const body = request.body
+    const id = request.params.id
+
+    if (!body || !body.nome || !body.email || !body.senha) {
+        return reply.status(400).send({ message: "nome, email e senha são obrigatórios!" })
+    }
+
+    const usuario = await sql.query('select * from usuario where id = $1', [id])
+    if (usuario.rows.length === 0) {
+        return reply.status(400).send({ message: "Usuário não existe!" })
+    }
+
+    const salt = 10
+    const senhaHash = await bcrypt.hash(body.senha, salt)
+
+    await sql.query('UPDATE usuario SET nome = $1, email = $2, senha = $3 WHERE id = $4', [body.nome, body.email, senhaHash, id])
+    reply.status(200).send({ message: `usuario ${body.nome} alterado!` })
+})
+
+servidor.delete('/usuarios/:id', async (request, reply) => {
+    const id = request.params.id
+    await sql.query('DELETE FROM usuario where id = $1', [id])
+    reply.status(200).send({ message: 'Usuário Deletado!' })
+})
+
+servidor.listen({
+    port: 3000
+})
+
+4. referencias.http
+
+### Cadastrar Usuário
+
+POST http://localhost:3000/usuarios
+Content-Type: application/json
+
+{
+    "nome": "Gyarados",
+    "email": "gyarados@pokemon.com",
+    "senha": "123"
+}
+
+
+### Listar Usuários
+
+GET http://localhost:3000/usuarios
+
+
+### Fazer Login (Gera o Token JWT)
+
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+    "email": "gyarados@pokemon.com",
+    "senha": "123"
+}
+
+
+### Atualizar Usuário por ID
+
+PUT http://localhost:3000/usuarios/1
+Content-Type: application/json
+
+{
+    "nome": "Gyarados Shiny",
+    "email": "gyarados@pokemon.com",
+    "senha": "12345"
+}
+
+
+### Deletar Usuário por ID
+
+DELETE http://localhost:3000/usuarios/1
+
+
+_________________________________
+
+
+FRONTEND:
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro e Login de Usuários</title>
+</head>
+<body>
+
+    <h2>Cadastrar Usuário</h2>
+    <form id="formCadastro" onsubmit="cadastrarUsuario(event)">
+        <input type="text" id="cadNome" placeholder="Nome" required>
+        <input type="email" id="cadEmail" placeholder="E-mail" required>
+        <input type="password" id="cadSenha" placeholder="Senha" required>
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <hr>
+
+    <h2>Login</h2>
+    <form id="formLogin" onsubmit="fazerLogin(event)">
+        <input type="email" id="loginEmail" placeholder="E-mail" required>
+        <input type="password" id="loginSenha" placeholder="Senha" required>
+        <button type="submit">Entrar</button>
+    </form>
+
+    <hr>
+
+    <h2>Lista de Usuários</h2>
+    <div id="lista"></div>
+
+    <script>
+        const URL = 'http://localhost:3000'
+
+        async function carregarUsuarios() {
+            const resposta = await fetch(`${URL}/usuarios`)
+            const usuarios = await resposta.json()
+
+            const lista = document.getElementById('lista')
+            lista.innerHTML = ''
+
+            usuarios.forEach(usuario => {
+                lista.innerHTML += `
+                    <div>
+                        <p><strong>ID:</strong> ${usuario.id} | <strong>Nome:</strong> ${usuario.nome} | <strong>Email:</strong> ${usuario.email}</p>
+                        <button onclick="editarUsuario(${usuario.id})">Editar</button>
+                        <button onclick="deletarUsuario(${usuario.id})">Deletar</button>
+                        <hr>
+                    </div>
+                `
+            })
+        }
+
+        async function cadastrarUsuario(event) {
+            event.preventDefault()
+
+            const nome = document.getElementById('cadNome').value
+            const email = document.getElementById('cadEmail').value
+            const senha = document.getElementById('cadSenha').value
+
+            const resposta = await fetch(`${URL}/usuarios`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome, email, senha })
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+
+            document.getElementById('formCadastro').reset()
+            carregarUsuarios()
+        }
+
+        async function fazerLogin(event) {
+            event.preventDefault()
+
+            const email = document.getElementById('loginEmail').value
+            const senha = document.getElementById('loginSenha').value
+
+            const resposta = await fetch(`${URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, senha })
+            })
+
+            const dados = await resposta.json()
+
+            if (resposta.ok) {
+                alert(`Login realizado com sucesso! Token: ${dados.token}`)
+                localStorage.setItem('token', dados.token)
+            } else {
+                alert(dados.message || dados.error)
+            }
+
+            document.getElementById('formLogin').reset()
+        }
+
+        async function deletarUsuario(id) {
+            const resposta = await fetch(`${URL}/usuarios/${id}`, {
+                method: 'DELETE'
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+            carregarUsuarios()
+        }
+
+        async function editarUsuario(id) {
+            const novoNome = prompt('Digite o novo nome:')
+            const novoEmail = prompt('Digite o novo email:')
+            const novaSenha = prompt('Digite a nova senha:')
+
+            if (!novoNome || !novoEmail || !novaSenha) {
+                alert('Todos os campos são obrigatórios para editar!')
+                return
+            }
+
+            const resposta = await fetch(`${URL}/usuarios/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome: novoNome, email: novoEmail, senha: novaSenha })
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+            carregarUsuarios()
+        }
+
+        carregarUsuarios()
+    </script>
+</body>
+</html>
+
+
+// ### Criptografia Bidirecional para Dados Sensíveis (CPF / LGPD)
+
+// Ao contrário de senhas (onde usamos Hash unidirecional com Bcrypt), dados pessoais sensíveis 
+// como o CPF precisam ser armazenados de forma segura no banco de dados para cumprir a LGPD, 
+// mas também precisam ser recuperados em texto puro para exibição no frontend.
+// Para isso, usamos Criptografia Bidirecional (Simétrica) com o módulo nativo 'crypto' do Node.js.
+
+import crypto from 'crypto'
+
+// Chave secreta de 32 caracteres (256 bits) e Vetor de Inicialização (IV) de 16 caracteres
+const CHAVE_SECRETA = process.env.CHAVE_LGPD || '12345678901234567890123456789012' // Exatamente 32 caracteres
+const IV = process.env.IV_LGPD || '1234567890123456'                            // Exatamente 16 caracteres
+
+// Função para CRIPTOGRAFAR (Usada antes de dar o INSERT ou UPDATE no banco de dados)
+function encriptarCPF(cpf) {
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(CHAVE_SECRETA), Buffer.from(IV))
+    let encriptado = cipher.update(cpf, 'utf8', 'hex')
+    encriptado += cipher.final('hex')
+    return encriptado
+}
+
+// Função para DESCRIPTOGRAFAR (Usada nas rotas GET antes de enviar os dados para o frontend)
+function descriptografarCPF(cpfCriptografado) {
+    try {
+        const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(CHAVE_SECRETA), Buffer.from(IV))
+        let decriptado = decipher.update(cpfCriptografado, 'hex', 'utf8')
+        decriptado += decipher.final('utf8')
+        return decriptado
+    } catch (error) {
+        return cpfCriptografado // Caso falhe ou o dado não esteja encriptado
+    }
+}
+
+// ### Exemplo de Cadastro do Cliente criptografando o CPF (POST):
+
+servidor.post('/clientes', async (request, reply) => {
+    const body = request.body
+
+    if (!body || !body.nome || !body.email || !body.cpf) {
+        return reply.status(400).send({ message: "nome, email e cpf são obrigatórios!" })
+    }
+
+    // Criptografa o CPF antes de inserir no Postgres
+    const cpfCriptografado = encriptarCPF(body.cpf)
+
+    await sql.query(
+        'INSERT INTO cliente (nome, email, cpf) VALUES ($1, $2, $3)', 
+        [body.nome, body.email, cpfCriptografado]
+    )
+
+    reply.status(201).send({ message: 'Cliente Cadastrado!' })
+})
+
+// ### Exemplo de Listagem de Clientes descriptografando o CPF (GET):
+
+servidor.get('/clientes', async (request, reply) => {
+    const resultado = await sql.query('SELECT * FROM cliente')
+
+    // Descriptografa o CPF de cada registro retornado do banco
+    const clientes = resultado.rows.map(cliente => ({
+        ...cliente,
+        cpf: descriptografarCPF(cliente.cpf)
+    }))
+
+    return clientes
+})

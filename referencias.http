@@ -1,0 +1,43 @@
+### Cadastrar Usuário
+
+POST http://localhost:3000/usuarios
+Content-Type: application/json
+
+{
+    "nome": "Gyarados",
+    "email": "gyarados@pokemon.com",
+    "senha": "123"
+}
+
+
+### Listar Usuários
+
+GET http://localhost:3000/usuarios
+
+
+### Fazer Login (Gera o Token JWT)
+
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+    "email": "gyarados@pokemon.com",
+    "senha": "123"
+}
+
+
+### Atualizar Usuário por ID
+
+PUT http://localhost:3000/usuarios/1
+Content-Type: application/json
+
+{
+    "nome": "Gyarados Shiny",
+    "email": "gyarados@pokemon.com",
+    "senha": "12345"
+}
+
+
+### Deletar Usuário por ID
+
+DELETE http://localhost:3000/usuarios/1

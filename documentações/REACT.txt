@@ -1,0 +1,304 @@
+// ### Introdução
+
+O React é uma biblioteca JavaScript para construir interfaces de usuário baseada em componentes. 
+Em vez de escrever todo o HTML em um único arquivo, dividimos a aplicação em pequenos pedaços reutilizáveis (componentes), como telas de Login, Cadastro e Listagem.
+
+Quando estamos construindo uma casa, os componentes são como os cômodos ou móveis pré-fabricados: cada um tem sua função e junta-se tudo no arquivo principal (geralmente o App.jsx).
+
+// ### Gerenciamento de Estado (useState)
+
+O estado (state) é a memória do componente. Quando o valor de um estado muda, o React atualiza e renderiza novamente a tela para mostrar a informação atualizada.
+
+import { useState } from 'react'
+
+const [tela, setTela] = useState('login')
+
+// 'tela' é a variável que guarda o valor atual.
+// 'setTela' é a função usada para alterar o valor dessa variável.
+// 'login' é o valor inicial do estado.
+
+// ### Navegação Simples entre Telas (App.jsx)
+
+Para alternar entre telas sem usar rotas complexas, podemos usar um estado que guarda o nome da tela atual e renderizar o componente correspondente condicionalmente.
+
+// Exemplo de App.jsx gerenciando navegação:
+
+import { useState } from 'react'
+import './App.css'
+import Login from './paginas/Login'
+import Cadastro from './paginas/Cadastro'
+import Usuarios from './paginas/Usuarios'
+
+function App() {
+  const [tela, setTela] = useState('login')
+
+  // Função que decide qual tela será mostrada na tela
+  const renderizarTela = () => {
+    if (tela === 'login') {
+      return <Login navegar={trocarTela} />
+    } else if (tela === 'cadastro') {
+      return <Cadastro navegar={trocarTela}/>
+    } else if (tela === 'usuarios') {
+      return <Usuarios/>
+    }
+  }
+
+  const trocarTela = (pagina) => {
+    setTela(pagina)
+  }
+
+  return (
+    <>
+      <h1>Aplicação React</h1>
+      <button onClick={() => trocarTela('login')}>login</button>
+      <button onClick={() => trocarTela('cadastro')}>cadastro</button>
+      <button onClick={() => trocarTela('usuarios')}>Usuarios</button>
+
+      <hr />
+
+      {/* Renderiza o componente retornado pela função */}
+      {renderizarTela()}
+    </>
+  )
+}
+
+export default App
+
+// OBS: A função 'trocarTela' é passada como prop ('navegar') para os componentes filhos trocarem de tela quando necessário.
+
+// ### Inputs Controlados e Requisições POST (Cadastro e Login)
+
+No React, os campos de entrada (inputs) devem ser controlados pelo estado. O valor do input vem do estado (`value={estado}`) e a alteração atualiza o estado (`onChange={(e) => setEstado(e.target.value)}`).
+
+// ### Componente de Cadastro (Cadastro.jsx)
+
+import { useState } from "react";
+
+export default function Cadastro ({navegar}) {
+    const [email, setEmail] = useState('') 
+    const [nome, setNome] = useState('')
+    const [senha, setSenha] = useState('')
+
+    const cadastrar = async () => {
+        // Envia os dados digitados para a API via POST
+        const resposta = await fetch('http://localhost:3000/usuarios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({email, nome, senha})
+        });
+        const data = await resposta.json()
+        console.log(data);
+        alert(data.message)
+
+        // Se o cadastro retornar sucesso, navega para a tela de usuarios
+        if(data.login){
+            navegar('usuarios')
+        }
+    }
+
+    return (
+        <div>
+            <h1>CADASTRO</h1>
+
+            <input type="text" id="email"
+                placeholder="DIGITE EMAIL"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+            />
+            <input type="text" id="nome"
+                placeholder="DIGITE NOME"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+            />
+            <input type="text" id="senha"
+                placeholder="DIGITE A SENHA"
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+            />
+
+            <br /><br />
+
+            <button onClick={() => cadastrar()}>Cadastrar</button>
+            <button onClick={() => navegar('login')}>ja tenho cadastro</button>
+        </div>
+    )
+}
+
+// ### Componente de Login (Login.jsx)
+
+import { useState } from "react";
+
+export default function Login ({navegar}) {
+    const [email, setEmail] = useState('')
+    const [senha, setSenha] = useState('')
+
+    const entrar = async () => {
+        const resposta = await fetch('http://localhost:3000/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({email, senha})
+        });
+        const data = await resposta.json()
+        console.log(data);
+        alert(data.message)
+
+        if(data.login){
+            navegar('usuarios')
+        }
+    }
+
+    return (
+        <div>
+            <h1>login</h1>
+
+            <input type="text" id="email"
+                placeholder="DIGITE EMAIL"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+            />
+            <input type="text" id="senha"
+                placeholder="DIGITE A SENHA"
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+            />
+
+            <br /><br />
+
+            <button onClick={() => entrar()}>ENTRAR</button>
+            <button onClick={() => navegar('cadastro')}>nao tenho cadastro</button>
+        </div>
+    )
+}
+
+// ### Efeitos Colaterais com useEffect
+
+O Hook `useEffect` serve para executar ações colaterais na página, como buscar dados na API assim que o componente carrega ou monitorar a mudança de algum estado.
+
+// Sintaxe do useEffect:
+// useEffect(() => { ... código ... }, [dependencias])
+
+// OBS: Se o array de dependências estiver vazio `[]`, o efeito roda apenas 1 vez quando a tela abre.
+// Se tiver variáveis dentro do array `[contador]`, o efeito roda toda vez que essa variável mudar.
+
+// ### Listagem de Dados (GET), Edição (PUT), Exclusão (DELETE) e Modal (Usuarios.jsx)
+
+No componente abaixo temos:
+1. `useEffect` buscando os usuários na API.
+2. `map()` renderizando a lista de usuários no HTML.
+3. Renderização condicional de um Modal para edição.
+4. Funções para atualizar (`PUT`) e excluir (`DELETE`) registros na API.
+
+import { useEffect, useState } from "react"
+
+export default function Usuarios () {
+    const [contador, setContador] = useState(0)
+    const [email, setEmail] = useState('')
+    const [nome, setNome] = useState('')
+    const [senha, setSenha] = useState('')
+    const [id, setId] = useState(0)
+    const [usuarios, setUsuarios] = useState([])
+    const [modal, setModal] = useState(false)
+
+    // Executa a busca toda vez que o contador muda
+    useEffect(() => {
+        document.title = 'contagem ' + contador;
+        buscarUsuarios()
+    }, [contador])
+
+    // GET: Busca a lista de usuarios na API
+    const buscarUsuarios = async () => {
+        const resposta = await fetch('http://localhost:3000/usuarios')
+        const data = await resposta.json()
+        setUsuarios(data);
+        console.log(data);
+    } 
+
+    // Prepara os estados com as informações do usuario selecionado e abre o modal
+    const editar = (usuario) => {
+        if(!usuario || !usuario.nome){
+            alert('erro ao buscar usuario')
+            return
+        }
+        setModal(true)
+        setEmail(usuario.email)
+        setNome(usuario.nome)
+        setSenha(usuario.senha)
+        setId(usuario.id)
+        console.log(usuario);
+    }
+
+    // PUT: Envia as alterações para a API
+    const confirmarEdicao = async () => {
+        const resultado = await fetch(`http://localhost:3000/usuarios/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({email, nome, senha})
+        })
+        const data = await resultado.json()
+        console.log(data);
+        buscarUsuarios() // Recarrega a lista atualizada
+        setModal(false)  // Fecha o modal
+    }
+
+    // DELETE: Remove o usuario na API
+    const deletar = async (usuario) => {
+        const resultado = await fetch(`http://localhost:3000/usuarios/${usuario.id}`, {
+            method: 'DELETE'
+        })
+        const data = await resultado.json()
+        console.log(data);
+        buscarUsuarios() // Recarrega a lista atualizada
+    }
+
+    return (
+        <div>
+            <h1>Usuarios</h1>
+            <h1>{contador}</h1>
+
+            <button onClick={() => {setContador(contador + 1)}}>
+                somar
+            </button>
+
+            {/* Renderização Condicional: O modal só aparece se a variável 'modal' for true */}
+            {modal && (
+                <div className="fundo-modal">
+                    <div className="modal-content">
+                        <h1>Editar</h1>
+                        <input type="text" id="email"
+                            placeholder="DIGITE EMAIL"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                        />
+                        <input type="text" id="nome"
+                            placeholder="DIGITE Nome"
+                            value={nome}
+                            onChange={(e) => setNome(e.target.value)}
+                        />
+                        <input type="text" id="senha"
+                            placeholder="DIGITE A SENHA"
+                            value={senha}
+                            onChange={(e) => setSenha(e.target.value)}
+                        />
+                        <button onClick={() => setModal(false)}>fechar</button>
+                        <button onClick={confirmarEdicao}>Confirmar edição</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Listagem de dados com .map() */}
+            <ul>
+                {usuarios.map((usuario) => (
+                    <li key={usuario.id}>
+                        <b>{usuario.nome}</b>
+                        <br />
+                        STATUS: { usuario.ativo ? 'Ativo' : 'Desativo' }
+                        <br />
+                        <button onClick={() => editar(usuario)}>editar</button>
+                        <br />
+                        <button onClick={() => deletar(usuario)}>deletar</button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
+}

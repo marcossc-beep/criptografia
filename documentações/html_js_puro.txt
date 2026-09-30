@@ -1,0 +1,167 @@
+// ### Introdução ao JavaScript Puro (Vanilla JS)
+
+Quando não usamos bibliotecas como React, construímos páginas dinâmicas manipulando a estrutura do HTML diretamente pelo JavaScript (técnica chamada de Manipulação do DOM).
+
+Em vez de usar estados (`useState`) ou componentes (`JSX`), utilizamos:
+1. `document.getElementById('id')`: Para capturar elementos do HTML.
+2. `.value`: Para ler o que o usuário digitou nos inputs.
+3. `.innerHTML`: Para alterar ou inserir código HTML dentro de uma div ou lista.
+4. `.forEach()`: Para percorrer um array de dados vindo da API e montar a estrutura repetitiva.
+
+// ### Estrutura Base do HTML (index.html)
+
+No HTML, criamos os inputs para formulário e deixamos áreas vazias (como `<div id="lista"></div>`) para que o JavaScript preencha os dados no momento certo.
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Gerenciamento de Usuários</title>
+</head>
+<body>
+    <h1>Cadastro de Usuários</h1>
+
+    <!-- Inputs para envio de dados -->
+    <input type="text" id="email" placeholder="Digite o Email">
+    <input type="text" id="nome" placeholder="Digite o Nome">
+    <input type="text" id="senha" placeholder="Digite a Senha">
+    
+    <button onclick="cadastrar()">Cadastrar</button>
+
+    <hr>
+
+    <h2>Lista de Usuários</h2>
+    <button onclick="buscarUsuarios()">Carregar Usuários</button>
+
+    <!-- Div vazia que receberá os dados formatados pelo JavaScript -->
+    <div id="lista"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
+// ### Manipulação do DOM (getElementById e innerHTML)
+
+No arquivo `script.js`, conectamos as funções aos elementos HTML usando suas IDs.
+
+// Regra de Ouro do innerHTML com forEach:
+// 1. Sempre limpe o conteúdo antes de fazer o loop: lista.innerHTML = ''
+// 2. Dentro do loop, use o operador += para somar (acumular) os novos elementos HTML na div.
+
+// ### Listar Registros da API (GET com forEach)
+
+async function buscarUsuarios() {
+    // 1. Faz a requisição na API
+    const resposta = await fetch('http://localhost:6767/usuarios');
+    const usuarios = await resposta.json();
+
+    // 2. Captura o elemento da tela onde a lista vai aparecer
+    const divLista = document.getElementById('lista');
+
+    // 3. Limpa a lista anterior para não duplicar os dados na tela
+    divLista.innerHTML = '';
+
+    // 4. Percorre a lista de usuários e monta o HTML usando Template Literals (``)
+    usuarios.forEach(usuario => {
+        divLista.innerHTML += `
+            <div style="border: 1px solid #ccc; margin: 10px; padding: 10px;">
+                <p><b>Nome:</b> ${usuario.nome}</p>
+                <p><b>Email:</b> ${usuario.email}</p>
+                <button onclick="preencherEdicao(${usuario.id}, '${usuario.nome}', '${usuario.email}')">Editar</button>
+                <button onclick="deletar(${usuario.id})">Deletar</button>
+            </div>
+        `;
+    });
+}
+
+// ### Cadastrar Registros (POST e Leitura de Inputs)
+
+async function cadastrar() {
+    // 1. Captura o valor digitado nos inputs pelo ID
+    const email = document.getElementById('email').value;
+    const nome = document.getElementById('nome').value;
+    const senha = document.getElementById('senha').value;
+
+    // Validação simples
+    if (!email || !nome || !senha) {
+        alert('Preencha todos os campos!');
+        return;
+    }
+
+    // 2. Envia os dados capturados para a API via POST
+    const resposta = await fetch('http://localhost:6767/usuarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, nome, senha })
+    });
+
+    const dados = await resposta.json();
+    alert(dados.message || 'Cadastrado com sucesso!');
+
+    // 3. Limpa os campos de input
+    document.getElementById('email').value = '';
+    document.getElementById('nome').value = '';
+    document.getElementById('senha').value = '';
+
+    // 4. Atualiza a lista na tela
+    buscarUsuarios();
+}
+
+// ### Excluir Registro (DELETE)
+
+async function deletar(id) {
+    const confirmacao = confirm('Deseja realmente deletar este usuário?');
+    if (!confirmacao) return;
+
+    const resposta = await fetch(`http://localhost:6767/usuarios/${id}`, {
+        method: 'DELETE'
+    });
+
+    const dados = await resposta.json();
+    alert(dados.message);
+
+    // Atualiza a lista
+    buscarUsuarios();
+}
+
+// ### Editar Registro (PUT)
+
+// Função auxiliar para preencher os inputs com os dados existentes do usuário
+function preencherEdicao(id, nome, email) {
+    document.getElementById('nome').value = nome;
+    document.getElementById('email').value = email;
+    
+    // Substitui o comportamento do botão para fazer a atualização
+    const botaoCadastrar = document.querySelector('button[onclick="cadastrar()"]');
+    botaoCadastrar.innerText = 'Salvar Alterações';
+    botaoCadastrar.setAttribute('onclick', `salvarEdicao(${id})`);
+}
+
+async function salvarEdicao(id) {
+    const email = document.getElementById('email').value;
+    const nome = document.getElementById('nome').value;
+    const senha = document.getElementById('senha').value;
+
+    const resposta = await fetch(`http://localhost:6767/usuarios/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, nome, senha })
+    });
+
+    const dados = await resposta.json();
+    alert(dados.message);
+
+    // Restaura o botão para a função original de cadastro
+    const botaoCadastrar = document.querySelector('button[onclick*="salvarEdicao"]');
+    botaoCadastrar.innerText = 'Cadastrar';
+    botaoCadastrar.setAttribute('onclick', 'cadastrar()');
+
+    // Limpa os inputs e recarrega a lista
+    document.getElementById('email').value = '';
+    document.getElementById('nome').value = '';
+    document.getElementById('senha').value = '';
+    buscarUsuarios();
+}
+
+// Carrega os dados automaticamente ao abrir a página
+window.onload = buscarUsuarios;

@@ -1,0 +1,192 @@
+// ### Introdução
+
+API serve para conectar no banco, o que usamos em aula foi a biblioteca do PG para integrar a api com o postgres.
+Usamos o PG Admin para gerenciar o postgres criando os bancos de dados e as tabelas no banco.
+
+// ### utilização do fastify para gerenciar o servidor e a comunicação com o http.
+// Quando vamos construir uma casa não precisamos criar os próprios tijólos nós compramos prontos e usamos.
+// O fastify é como a loja onde encontramos os meios para criar a casa sem precisar criar esses meios a cada projeto.
+
+import Fastify from 'fastify'
+const servidor = Fastify();
+
+// ### Como conectar a API no banco de dados:
+
+import { Pool } from 'pg' // importação da biblioteca de conexão com o postgress
+
+const sql = new Pool({
+    user: "postgres", // usuario padrão do postgres mas da pra criar outro usuario se quiser
+    password: "senai", // senha do banco
+    host: "localhost", // ip da sua máquina
+    port: 5432,  // porta que o banco está rodando normalmente é 5432
+    database: "receitas" // Nome do banco de dados
+})
+// OBS: Essa variável chamada sql será usada para conectar a api ao banco de dados dessa forma:  
+// sql.query( 'aqui vai a query SQL' , [ 'Aqui vão ficar os valores que serão usados dentro da query' ] ) 
+
+// exemplo:
+
+await sql.query('DELETE FROM usuario where id = $1', [id]) 
+
+// $1 é o valor da variável id que está no array de dependencias.
+
+// OUTRO EXEMPLO:
+
+await sql.query('INSERT INTO usuario (nome, senha, email) VALUES ($1, $2, $3)', [body.nome, body.senha, body.email])  
+
+// podem ter outros elementos no array de dependencias 
+
+$1 vai receber o valor de body.nome,
+$2 vai receber o valor de body.senha,
+$3 vai receber o valor de body.email
+
+// isso é necessário para evitar SQL injection
+
+// ### Configuração de CORS
+// CORS são uma camada de proteção nós sempre precisamos desenvolver isso para permitir o uso da api em navegadores.
+// É uma configuração padrão para todos os projetos normalmente usamos dessa forma mesmo.
+
+
+import cors from '@fastify/cors'
+
+servidor.register(cors, {
+    origin: '*',
+    methods: ['PUT', 'POST', 'DELETE', 'GET']
+});
+
+// ### REQUISIÇÕES HTTP
+
+Toda requisição tem um método então GET, POST, PUT, PATCH ou DELETE.
+Toda requisição tem um nome de endpoint por exemplo /login.
+Quando fazemos requisições alguns métodos podem ter um body também conhecido como payload.
+As requisições tem um header, normalmente usamos o Content-Type: application/json para enviar json no body.
+O método post, put e patch podem ter um body.
+
+// ### GET
+
+// Quando vamos buscar algo no servidor usamos o metodo get o endpoint abaixo retorna todos os registros da tabela.
+
+// reply é usado para enviar uma resposta personalizada
+
+servidor.get('/usuarios', async (request, reply) => {
+    const usuarios = await sql.query('select * from usuario')
+    reply.send(usuarios.rows)
+})
+
+// ### POST
+
+// request é onde ficam as informações que vieram na requisição como o body
+
+servidor.post('/login', async (request, reply) => {
+    const body = request.body;
+    if (!body || !body.email || !body.senha) {
+        reply.status(400).send({error: "email e senha obrigatórios!"})
+    }
+    const resultado = await sql.query('select * from usuario where email = $1 AND senha = $2', [body.email, body.senha])    
+
+    if (resultado.rows.length === 0) {
+        reply.status(401).send({message: "Usuário ou senha inválidos!", login: false})
+    } else if (resultado.rows.length === 1) {
+        reply.status(200).send({message: "usuario logado", login: true})
+    }
+
+})
+
+// ### PUT
+
+// put é usado para alterar algo no servidor então é necessário enviar na requisição o id e o body.
+
+// o id é o que será editado e o body é o que será inserido no lugar.
+// normalmente enviamos o id na propria url da requisição por isso :id
+
+servidor.put('/usuarios/:id', async (request, reply) => {
+    const body = request.body;
+    const id = request.params.id;
+
+    if (!body || !body.nome || !body.senha || !body.email) {
+        return reply.status(400).send({
+            message: "nome, email e senha são obrigatórios!"
+        })
+    } else if (!id) {
+        return reply.status(400).send({
+            message: "Faltou o ID!"
+        })
+    }
+
+    const usuario = await sql.query('select * from usuario where id = $1', [id])  
+    if (usuario.rows.length === 0) {
+        return reply.status(400).send({
+            message: "Usuário não existe!"
+        })
+    }
+
+    const resultado = await sql.query('UPDATE usuario SET nome = $1, senha = $2, email = $4 WHERE id = $3', [body.nome, body.senha, id, body.email])      
+    reply.status(201).send({message: `usuario ${body.nome} alterado!`})          
+})
+
+// ### DELETE
+
+// é necessário enviar para o servidor o id de qual registro será deletado.
+// normalmente enviamos o id na propria url da requisição por isso :id
+
+servidor.delete('/usuarios/:id', async (request, reply) => {
+    const id = request.params.id
+    const resultado = await sql.query('DELETE FROM usuario where id = $1', [id]) 
+    console.log(resultado);    
+    reply.status(200).send({message:'Usuário Deletado!'})
+})
+
+// ### Listen
+
+// é necessário definir a porta que a api vai rodar no caso 6767
+// Esse código normalmente fica no final do arquivo server.js 
+
+servidor.listen({   
+    port: 6767
+})
+
+
+// ### Testando a API com REST Client (referencias.http)
+
+O REST Client é uma extensão do VS Code que permite testar as rotas da API direto no editor, sem precisar de programas como Postman ou Insomnia. Criamos um arquivo chamado `referencias.http` na raiz do projeto.
+
+// Regras do arquivo .http:
+// 1. Usamos três hashtags '###' para separar uma requisição da outra.
+// 2. Primeira linha: Método HTTP + URL completa (ex: POST http://localhost:6767/login).
+// 3. Headers: Ficam logo abaixo da URL. Usamos 'Content-Type: application/json' para avisar que o body está em JSON.
+// 4. Linha em branco: É OBRIGATÓRIO dar 1 espaço (linha em branco) entre os Headers e o Body, senão a requisição dá erro.
+// 5. Body (Payload): É o JSON enviado para o servidor nos métodos POST, PUT ou PATCH.
+
+// ### Exemplos para o arquivo referencias.http:
+
+### Buscar todos os usuários (GET)
+
+GET http://localhost:6767/usuarios
+
+
+### Fazer Login (POST)
+
+POST http://localhost:6767/login
+Content-Type: application/json
+
+{
+    "email": "marcos@email.com",
+    "senha": "senai"
+}
+
+
+### Atualizar um usuário por ID (PUT)
+
+PUT http://localhost:6767/usuarios/1
+Content-Type: application/json
+
+{
+    "nome": "Marcos Vinicius",
+    "email": "marcos@email.com",
+    "senha": "123"
+}
+
+
+### Deletar um usuário por ID (DELETE)
+
+DELETE http://localhost:6767/usuarios/1

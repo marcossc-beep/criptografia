@@ -1,0 +1,277 @@
+// ### Introdução ao Gerenciamento de Sessão, LocalStorage e Logout
+
+Quando o usuário faz login, a API retorna um Token JWT e os dados básicos do usuário (como nome e e-mail).
+Para manter o usuário autenticado mesmo se ele recarregar ou fechar a página, salvamos essas informações no `localStorage` do navegador.
+
+Conceitos fundamentais:
+1. `localStorage.setItem('chave', valor)`: Salva uma informação no navegador.
+2. `localStorage.getItem('chave')`: Recupera a informação salva.
+3. `localStorage.removeItem('chave')`: Apaga a informação (usado no Logout).
+4. `JSON.stringify()` / `JSON.parse()`: Usados para converter objetos JavaScript em texto e vice-versa, permitindo salvar objetos no localStorage.
+
+// ### Backend (Fastify + JWT + Bcrypt)
+
+No backend, a rota `/login` valida o e-mail e a senha criptografada (`bcrypt.compare`). Se a autenticação for bem-sucedida, gera o Token JWT e o retorna junto com o objeto do usuário.
+
+import Fastify from 'fastify'
+import { Pool } from 'pg'
+import cors from '@fastify/cors'
+import jwt from '@fastify/jwt'
+import bcrypt from 'bcrypt'
+
+const servidor = Fastify()
+servidor.register(cors, { origin: '*' })
+servidor.register(jwt, { secret: 'minhachavesegreta123' })
+
+const sql = new Pool({
+    user: 'postgres',
+    password: '123',
+    host: 'localhost',
+    port: 5432,
+    database: 'sistema'
+})
+
+// Rota de Login: Retorna Token JWT + Dados do Usuário
+servidor.post('/login', async (request, reply) => {
+    const { email, senha } = request.body
+
+    if (!email || !senha) {
+        return reply.status(400).send({ message: "E-mail e senha são obrigatórios!" })
+    }
+
+    const resultado = await sql.query('SELECT * FROM usuario WHERE email = $1', [email])
+
+    if (resultado.rows.length === 0) {
+        return reply.status(401).send({ message: "Usuário ou senha inválidos!" })
+    }
+
+    const usuario = resultado.rows[0]
+    const senhaValida = await bcrypt.compare(senha, usuario.senha)
+
+    if (!senhaValida) {
+        return reply.status(401).send({ message: "Usuário ou senha inválidos!" })
+    }
+
+    // Gerar Token JWT
+    const token = servidor.jwt.sign({ id: usuario.id, email: usuario.email })
+
+    // Retorna o token E as informações que o frontend precisa para exibir na tela (ex: nome)
+    return reply.status(200).send({
+        message: "Login realizado com sucesso!",
+        token: token,
+        usuario: {
+            id: usuario.id,
+            nome: usuario.nome,
+            email: usuario.email
+        }
+    })
+})
+
+servidor.listen({ port: 3000 })
+
+// ### Frontend em JavaScript Puro (HTML + Vanilla JS)
+
+No HTML/JS puro, controlamos a exibição das telas alternando o CSS `display` (`none` para ocultar, `block` para exibir) com base na presença do usuário no `localStorage`.
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Sistema - Login e Sessão</title>
+</head>
+<body>
+
+    <!-- Área exibida quando o usuário NÃO está logado -->
+    <div id="areaLogin">
+        <h2>Área de Login</h2>
+        <form id="formLogin" onsubmit="fazerLogin(event)">
+            <input type="email" id="email" placeholder="E-mail" required>
+            <br><br>
+            <input type="password" id="senha" placeholder="Senha" required>
+            <br><br>
+            <button type="submit">Entrar</button>
+        </form>
+    </div>
+
+    <!-- Área exibida quando o usuário ESTÁ logado -->
+    <div id="areaPainel" style="display: none;">
+        <h2>Bem-vindo, <span id="nomeUsuario"></span>!</h2>
+        <p>Você está autenticado no sistema.</p>
+        <button id="btnLogout" onclick="fazerLogout()">Sair (Logout)</button>
+    </div>
+
+    <script>
+        const URL = 'http://localhost:3000'
+
+        // Captura dos elementos do DOM
+        const areaLogin = document.getElementById('areaLogin')
+        const areaPainel = document.getElementById('areaPainel')
+        const nomeUsuarioSpan = document.getElementById('nomeUsuario')
+        const formLogin = document.getElementById('formLogin')
+
+        // Função que verifica se existe usuário salvo no localStorage ao abrir a página
+        function verificarSessao() {
+            const usuarioSalvo = localStorage.getItem('usuario')
+
+            if (usuarioSalvo) {
+                const usuario = JSON.parse(usuarioSalvo)
+                nomeUsuarioSpan.textContent = usuario.nome
+                
+                // Oculta tela de login e exibe o painel do usuário
+                areaLogin.style.display = 'none'
+                areaPainel.style.display = 'block'
+            } else {
+                // Exibe tela de login e oculta o painel
+                areaLogin.style.display = 'block'
+                areaPainel.style.display = 'none'
+            }
+        }
+
+        // Submissão do formulário de Login via onsubmit
+        async function fazerLogin(e) {
+            e.preventDefault()
+
+            const email = document.getElementById('email').value
+            const senha = document.getElementById('senha').value
+
+            const resposta = await fetch(`${URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, senha })
+            })
+
+            const dados = await resposta.json()
+
+            if (resposta.ok) {
+                // Salva token e objeto do usuário no localStorage
+                localStorage.setItem('token', dados.token)
+                localStorage.setItem('usuario', JSON.stringify(dados.usuario))
+
+                alert(dados.message)
+                formLogin.reset()
+                verificarSessao() // Atualiza a exibição da tela
+            } else {
+                alert(dados.message)
+            }
+        }
+
+        // Ação do Botão de Logout via onclick
+        function fazerLogout() {
+            // Limpa os dados do localStorage
+            localStorage.removeItem('token')
+            localStorage.removeItem('usuario')
+
+            alert('Você saiu do sistema!')
+            verificarSessao() // Atualiza a tela voltando para a interface de login
+        }
+
+        // Executa a verificação assim que a página é carregada
+        verificarSessao()
+    </script>
+</body>
+</html>
+
+// ### Frontend em React (App.jsx)
+
+No React, utilizamos o estado `usuarioLogado` combinado com Renderização Condicional (`termo ? <Painel /> : <Login />`) e o `useEffect` para ler o `localStorage` no momento em que o componente é montado.
+
+import { useState, useEffect } from 'react'
+
+export default function App() {
+    const [email, setEmail] = useState('')
+    const [senha, setSenha] = useState('')
+    const [usuarioLogado, setUsuarioLogado] = useState(null)
+
+    // Executa ao montar o componente para restaurar a sessão do localStorage
+    useEffect(() => {
+        const usuarioSalvo = localStorage.getItem('usuario')
+        if (usuarioSalvo) {
+            setUsuarioLogado(JSON.parse(usuarioSalvo))
+        }
+    }, [])
+
+    // Função de Login
+    const handleLogin = async (e) => {
+        e.preventDefault()
+
+        const resposta = await fetch('http://localhost:3000/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, senha })
+        })
+
+        const dados = await resposta.json()
+
+        if (resposta.ok) {
+            // 1. Grava no localStorage
+            localStorage.setItem('token', dados.token)
+            localStorage.setItem('usuario', JSON.stringify(dados.usuario))
+
+            // 2. Atualiza o Estado do React para re-renderizar a tela logada imediatamente
+            setUsuarioLogado(dados.usuario)
+
+            setEmail('')
+            setSenha('')
+        } else {
+            alert(dados.message)
+        }
+    }
+
+    // Função de Logout
+    const handleLogout = () => {
+        // 1. Remove os dados salvos no localStorage
+        localStorage.removeItem('token')
+        localStorage.removeItem('usuario')
+
+        // 2. Limpa o Estado para voltar para a tela de login
+        setUsuarioLogado(null)
+    }
+
+    return (
+        <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
+            {usuarioLogado ? (
+                /* RENDERIZAÇÃO CONDICIONAL: TELA LOGADO */
+                <div>
+                    <h2>Bem-vindo, {usuarioLogado.nome}!</h2>
+                    <p><strong>E-mail:</strong> {usuarioLogado.email}</p>
+                    <button onClick={handleLogout}>Sair (Logout)</button>
+                </div>
+            ) : (
+                /* RENDERIZAÇÃO CONDICIONAL: TELA DE LOGIN */
+                <div>
+                    <h2>Área de Login</h2>
+                    <form onSubmit={handleLogin}>
+                        <input 
+                            type="email" 
+                            placeholder="E-mail" 
+                            value={email} 
+                            onChange={(e) => setEmail(e.target.value)} 
+                            required 
+                        />
+                        <br /><br />
+                        <input 
+                            type="password" 
+                            placeholder="Senha" 
+                            value={senha} 
+                            onChange={(e) => setSenha(e.target.value)} 
+                            required 
+                        />
+                        <br /><br />
+                        <button type="submit">Entrar</button>
+                    </form>
+                </div>
+            )}
+        </div>
+    )
+}
+
+// ### Testes com REST Client (referencias.http)
+
+### Testar Login e verificar retorno do Token e dados do Usuário
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+    "email": "marcos@email.com",
+    "senha": "123"
+}

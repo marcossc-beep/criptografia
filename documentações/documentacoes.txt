@@ -1,0 +1,132 @@
+============================================================================
+           MODELO DE DOCUMENTAÇÃO DE SOFTWARE (documentacao.pdf)
+============================================================================
+
+1. VISÃO GERAL DO SISTEMA
+----------------------------------------------------------------------------
+Nome do Sistema: Sistema de Gestão de Vendas e Estoque
+Descrição: Aplicação Web desenvolvida com backend em Node.js (Fastify) e banco
+de dados PostgreSQL, integrada com frontend React/HTML5. O sistema visa
+gerenciar usuários, clientes, categorias e produtos, garantindo a proteção
+de dados pessoais de acordo com as normas de segurança (LGPD).
+
+
+2. REQUISITOS FUNCIONAIS (RF)
+----------------------------------------------------------------------------
+Os Requisitos Funcionais descrevem *o que* o sistema deve fazer.
+
+[RF01] Cadastrar Usuário do Sistema
+- Descrição: O sistema deve permitir o cadastro de administradores/operadores
+  informando nome, e-mail e senha.
+- Prioridade: Alta
+
+[RF02] Autenticar Usuário (Login)
+- Descrição: O sistema deve validar e-mail e senha do usuário cadastrado,
+  retornando um token de autenticação JWT e os dados do usuário logado.
+- Prioridade: Alta
+
+[RF03] Cadastrar Cliente
+- Descrição: O sistema deve permitir o cadastro de clientes contendo nome,
+  e-mail e CPF.
+- Prioridade: Alta
+
+[RF04] Cadastrar Categoria
+- Descrição: O sistema deve permitir o cadastro de categorias de produtos
+  (ex: Eletrônicos, Móveis).
+- Prioridade: Média
+
+[RF05] Cadastrar Produto com Categoria (Chave Estrangeira)
+- Descrição: O sistema deve permitir o cadastro de produtos vinculando-os
+  obrigatoriamente a uma Categoria existente (selecionada via campo <select>).
+- Prioridade: Alta
+
+[RF06] Listar e Filtrar Registros
+- Descrição: O sistema deve exibir a listagem de produtos e clientes
+  cadastrados no banco de dados.
+- Prioridade: Média
+
+[RF07] Encerrar Sessão (Logout)
+- Descrição: O sistema deve permitir que o usuário saia da aplicação,
+  removendo os dados de autenticação armazenados no navegador.
+- Prioridade: Média
+
+
+3. REQUISITOS NÃO-FUNCIONAIS (RNF)
+----------------------------------------------------------------------------
+Os Requisitos Não-Funcionais definem as qualidades, restrições e padrões
+técnicos do sistema.
+
+[RNF01] Criptografia de Senhas (Bcrypt)
+- Descrição: As senhas dos usuários devem ser salvas no banco de dados
+  utilizando algoritmo de Hash unidirecional (Bcrypt) com Salt.
+- Categoria: Segurança
+
+[RNF02] Criptografia Bidirecional de Dados Sensíveis (LGPD)
+- Descrição: Dados pessoais sensíveis (ex: CPF) devem ser criptografados no
+  banco de dados via AES-256-CBC e descriptografados ao serem exibidos no
+  frontend.
+- Categoria: Segurança / Conformidade LGPD
+
+[RNF03] Autenticação via Token (JWT)
+- Descrição: O controle de sessão e permissões deve utilizar JSON Web Tokens
+  (JWT) com tempo de expiração definido.
+- Categoria: Arquitetura / Segurança
+
+[RNF04] Armazenamento Local (localStorage)
+- Descrição: O frontend deve persistir o token JWT e o objeto do usuário
+  logado no `localStorage` do navegador para manter a sessão ativa.
+- Categoria: Usabilidade / Estado
+
+[RNF05] Banco de Dados Relacional
+- Descrição: A aplicação deve utilizar PostgreSQL com integridade referencial
+  (Chaves Primárias e Chaves Estrangeiras).
+- Categoria: Infraestrutura
+
+
+4. REGRAS DE NEGÓCIO (RN)
+----------------------------------------------------------------------------
+As Regras de Negócio definem as restrições e políticas de funcionamento do
+domínio do problema.
+
+[RN01] Unicidade do E-mail
+- Nenhum usuário ou cliente pode ser cadastrado com um e-mail já existente
+  no banco de dados.
+
+[RN02] Obrigatoriedade de Categoria
+- Um produto só pode ser cadastrado se estiver associado a uma Categoria
+  válida (categoria_id existente na tabela `categoria`).
+
+[RN03] Proteção de Rotas Privadas
+- Somente usuários autenticados com um Token JWT válido podem cadastrar,
+  editar ou remover registros do sistema.
+
+[RN04] Limpeza Completa na Saída (Logout)
+- Ao acionar a opção "Sair", todas as credenciais (token e dados do usuário)
+  devem ser removidas do `localStorage` do navegador e a tela deve retornar
+  ao estado de login.
+
+
+5. MODELAGEM DO BANCO DE DADOS (DER / TABELAS)
+----------------------------------------------------------------------------
+
+Tabela: usuario
+- id: SERIAL PRIMARY KEY
+- nome: VARCHAR(255) NOT NULL
+- email: VARCHAR(255) NOT NULL UNIQUE
+- senha: VARCHAR(255) NOT NULL (Hash Bcrypt)
+
+Tabela: cliente
+- id: SERIAL PRIMARY KEY
+- nome: VARCHAR(255) NOT NULL
+- email: VARCHAR(255) NOT NULL UNIQUE
+- cpf: VARCHAR(255) NOT NULL (Criptografado AES-256)
+
+Tabela: categoria
+- id: SERIAL PRIMARY KEY
+- nome: VARCHAR(100) NOT NULL
+
+Tabela: produto
+- id: SERIAL PRIMARY KEY
+- nome: VARCHAR(255) NOT NULL
+- preco: NUMERIC(10, 2) NOT NULL
+- categoria_id: INTEGER NOT NULL (FOREIGN KEY -> categoria.id)

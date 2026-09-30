@@ -1,0 +1,233 @@
+// ### Introdução a Banco de Dados
+
+Um banco de dados relacional é como se fosse uma planilha eletrônica gigante e muito rápida, organizada em tabelas.
+Para entender como as informações ficam guardadas, pense assim:
+
+- Tabela: É como uma aba da sua planilha (exemplo: Tabela de "USUARIO", Tabela de "RECEITA").
+- Colunas (Campos): Definem o tipo de informação que vai ser salva em cada registro (exemplo: nome, email, senha).
+- Linhas (Registros ou Tuplas): São os dados reais cadastrados (exemplo: Linha 1 possui o usuário "Marcos", email "marcos@email.com").
+
+O SQL (Structured Query Language) é a linguagem que usamos para conversar com o PostgreSQL e mandar ele criar tabelas, salvar, alterar, buscar ou deletar essas linhas.
+
+// ### Exemplo de Criação de Tabelas (DDL)
+
+CREATE TABLE USUARIO (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    senha VARCHAR(255) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE RECEITA (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255),
+    ingredientes TEXT NOT NULL,
+    instrucoes TEXT NOT NULL,
+    tempo_preparo_minutos INTEGER NOT NULL,
+    usuario_id INTEGER NOT NULL REFERENCES USUARIO(id) ON DELETE CASCADE
+);
+
+// ### Explicação dos Tipos de Dados e Regras Básicas
+
+- SERIAL: Cria um número inteiro que aumenta sozinho automaticamente (1, 2, 3...) a cada novo cadastro. Usado para gerar IDs únicos.
+- VARCHAR(255): Guardar texto com um limite máximo de caracteres (nesse caso, até 255 letras/símbolos). Perfeito para nomes, emails e senhas.
+- TEXT: Guardar textos longos sem limite pré-definido. Ideal para receitas, descrições, histórico de consultas e instruções.
+- INTEGER: Guardar números inteiros positivos ou negativos (ex: tempo em minutos, idade, quantidade).
+- BOOLEAN: Guardar apenas valores verdadeiros ou falsos (true ou false).
+- TIMESTAMP: Guardar data e hora exatas juntas (ex: 2026-09-30 14:30:00).
+
+// Regras e Atributos das Colunas:
+- PRIMARY KEY: Identificador único de cada linha da tabela. Não pode repetir e não pode ser nulo (é como o CPF daquela linha).
+- NOT NULL: Torna o preenchimento da coluna obrigatório. Se tentar salvar sem essa informação, o banco gera erro.
+- UNIQUE: Garante que não existam dois registros com o mesmo valor nessa coluna (ex: impede dois usuários com o mesmo email).
+- DEFAULT: Define um valor automático caso a pessoa não envie nada na hora de cadastrar (ex: 'DEFAULT TRUE' deixa o usuário ativo por padrão; 'DEFAULT CURRENT_TIMESTAMP' pega a data e hora exatas do computador/servidor).
+- REFERENCES USUARIO(id): Cria a ligação (Chave Estrangeira/Foreign Key) dizendo que o 'usuario_id' dessa tabela precisa ser o 'id' de um usuário válido da tabela USUARIO.
+- ON DELETE CASCADE: Se um usuário for deletado da tabela USUARIO, todas as receitas ligadas ao ID dele serão apagadas automaticamente junto.
+
+// ### Tipos de Relacionamentos entre Tabelas
+
+// 1) Relacionamento 1 para 1 (1:1)
+// Acontece quando um registro da Tabela A se relaciona com APENAS UM registro da Tabela B, e vice-versa.
+// Exemplo: Um Usuário tem apenas um Prontuário/Perfil, e aquele Prontuário pertence a apenas um Usuário.
+
+CREATE TABLE PERFIL (
+    id SERIAL PRIMARY KEY,
+    biografia TEXT,
+    foto_url VARCHAR(255),
+    usuario_id INTEGER NOT NULL UNIQUE REFERENCES USUARIO(id) ON DELETE CASCADE
+);
+// OBS: O segredo do 1 para 1 é colocar a chave 'UNIQUE' na chave estrangeira, impedindo que o mesmo usuário tenha mais de um perfil.
+
+// 2) Relacionamento 1 para N (1 para Muitos)
+// É o modelo mais comum. Um registro da Tabela A pode ter VÁRIOS registros na Tabela B, mas o registro da Tabela B pertence a apenas UM da Tabela A.
+// Exemplo: O exemplo da tabela RECEITA lá em cima! Um Usuário pode criar VÁRIAS receitas, mas cada receita pertence a apenas UM Usuário.
+
+// 3) Relacionamento N para N (Muitos para Muitos)
+// Acontece quando vários registros da Tabela A se relacionam com vários registros da Tabela B.
+// Exemplo: Uma Receita pode ter várias Categorias (Ex: "Massa", "Rápida", "Jantar") e uma Categoria pode estar em várias Receitas.
+// Para fazer isso funcionar no banco, precisamos de uma terceira tabela (Tabela Intermediária / Tabela Pivô):
+
+CREATE TABLE CATEGORIA (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE RECEITA_CATEGORIA (
+    receita_id INTEGER NOT NULL REFERENCES RECEITA(id) ON DELETE CASCADE,
+    categoria_id INTEGER NOT NULL REFERENCES CATEGORIA(id) ON DELETE CASCADE,
+    PRIMARY KEY (receita_id, categoria_id) // Garante que a mesma receita não receba a mesma categoria duas vezes
+);
+
+// ### Inserindo Dados (INSERT)
+
+Usamos o 'INSERT INTO' para salvar novas linhas no banco de dados.
+
+// Exemplo cadastrando usuários:
+INSERT INTO USUARIO (nome, email, senha) 
+VALUES ('Marcos Coelho', 'marcos@email.com', '123456');
+
+INSERT INTO USUARIO (nome, email, senha) 
+VALUES ('Brunna Souza', 'brunna@email.com', 'senha654');
+
+// Exemplo cadastrando receitas (precisa informar o usuario_id do criador):
+INSERT INTO RECEITA (nome, ingredientes, instrucoes, tempo_preparo_minutos, usuario_id) 
+VALUES ('Bolo de Cenoura', 'Cenoura, Trigo, Ovos, Açúcar', 'Bata tudo e asse por 40 min', 45, 1);
+
+INSERT INTO RECEITA (nome, ingredientes, instrucoes, tempo_preparo_minutos, usuario_id) 
+VALUES ('Strogonoff de Frango', 'Frango, Creme de Leite, Ketchup', 'Cozinhe o frango e misture o molho', 30, 1);
+
+// ### Atualizando Dados (UPDATE)
+
+Usamos o 'UPDATE' para alterar informações de linhas que já existem no banco.
+ATENÇÃO: Sempre use o 'WHERE' no UPDATE! Se esquecer o WHERE, vai atualizar a tabela inteira!
+
+// Exemplo alterando a senha do usuário de ID 1:
+UPDATE USUARIO 
+SET senha = 'novasenha123' 
+WHERE id = 1;
+
+// Exemplo alterando o tempo de preparo e o nome de uma receita:
+UPDATE RECEITA 
+SET tempo_preparo_minutos = 50, nome = 'Bolo de Cenoura com Cobertura' 
+WHERE id = 1;
+
+// ### Buscando Dados (SELECT e WHERE)
+
+Usamos o 'SELECT' para ler e buscar os dados cadastrados.
+
+// Buscar todas as colunas de todos os usuários (* significa "todas as colunas"):
+SELECT * FROM USUARIO;
+
+// Buscar apenas os campos nome e email dos usuários:
+SELECT nome, email FROM USUARIO;
+
+// Filtrando buscas com WHERE:
+SELECT * FROM USUARIO WHERE id = 1;
+
+SELECT * FROM USUARIO WHERE ativo = true;
+
+// Buscar receitas com tempo de preparo menor que 40 minutos:
+SELECT * FROM RECEITA WHERE tempo_preparo_minutos < 40;
+
+// Buscar usando busca parcial de texto com ILIKE (no Postgres o ILIKE ignora maiúsculas e minúsculas):
+SELECT * FROM RECEITA WHERE nome ILIKE '%bolo%';
+
+// ### Cruzando Dados entre Tabelas com JOIN
+
+O JOIN serve para juntar as colunas de duas ou mais tabelas na mesma consulta usando a chave estrangeira (usuario_id) que faz a ligação entre elas.
+
+// 1) INNER JOIN (Traz apenas o que tem correspondência nas duas tabelas)
+// Só vai retornar as receitas que possuem um usuário associado válido, e o usuário que tem receita.
+
+SELECT 
+    RECEITA.id, 
+    RECEITA.nome AS nome_receita, 
+    RECEITA.tempo_preparo_minutos,
+    USUARIO.nome AS criador_da_receita,
+    USUARIO.email
+FROM RECEITA
+INNER JOIN USUARIO ON RECEITA.usuario_id = USUARIO.id;
+
+// 2) LEFT JOIN (Traz TODOS da tabela da esquerda, mesmo se não tiver nada na tabela da direita)
+// Traz todos os usuários do banco, mesmo aqueles que NUNCA cadastraram nenhuma receita.
+
+SELECT 
+    USUARIO.nome AS usuario, 
+    RECEITA.nome AS receita
+FROM USUARIO
+LEFT JOIN RECEITA ON USUARIO.id = RECEITA.usuario_id;
+
+// OBS: O 'AS' serve para dar um apelido (alias) temporário para a coluna no resultado da busca, facilitando o entendimento.
+
+
+// ### Encadeamento de Múltiplos JOINs (JOIN Triplo em 3 Tabelas)
+
+// Quando uma tabela se liga a outra que por sua vez se liga a uma terceira (relacionamento encadeado por Chaves Estrangeiras),
+// usamos mais de um INNER JOIN na mesma instrução SELECT para retornar todos os dados consolidados em uma única consulta.
+
+// Estrutura do Exemplo (3 Tabelas Encadeadas):
+// 1. CLIENTE (Tabela Base)
+// 2. EQUIPAMENTO (Pertence a um Cliente -> possui cliente_id)
+// 3. ORDEM_SERVICO (Pertence a um Equipamento -> possui equipamento_id)
+
+-- 1. Criação das Tabelas
+CREATE TABLE CLIENTE (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    telefone VARCHAR(20) NOT NULL
+);
+
+CREATE TABLE EQUIPAMENTO (
+    id SERIAL PRIMARY KEY,
+    modelo VARCHAR(255) NOT NULL,
+    numero_serie VARCHAR(100) NOT NULL,
+    cliente_id INTEGER NOT NULL REFERENCES CLIENTE(id) ON DELETE CASCADE
+);
+
+CREATE TABLE ORDEM_SERVICO (
+    id SERIAL PRIMARY KEY,
+    data_agendamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    descricao_defeito TEXT NOT NULL,
+    status VARCHAR(50) DEFAULT 'Pendente',
+    equipamento_id INTEGER NOT NULL REFERENCES EQUIPAMENTO(id) ON DELETE CASCADE
+);
+
+-- 2. Inserção de Dados de Exemplo
+INSERT INTO CLIENTE (nome, telefone) 
+VALUES ('Carlos Eduardo', '48999998888');
+
+INSERT INTO EQUIPAMENTO (modelo, numero_serie, cliente_id) 
+VALUES ('Notebook Dell XPS', 'SN-12345', 1);
+
+INSERT INTO ORDEM_SERVICO (descricao_defeito, equipamento_id) 
+VALUES ('Troca de bateria e formatação', 1);
+
+
+// 3. Consulta SELECT com JOIN Triplo:
+// Traz os dados da Ordem de Serviço, do Equipamento e do Cliente proprietário na mesma busca.
+
+SELECT 
+    -- Campos da Ordem de Serviço (Tabela principal da busca)
+    os.id AS id_ordem_servico,
+    os.data_agendamento,
+    os.descricao_defeito,
+    os.status,
+
+    -- Campos do Equipamento (Primeiro vínculo)
+    eq.id AS id_equipamento,
+    eq.modelo AS modelo_equipamento,
+    eq.numero_serie,
+
+    -- Campos do Cliente (Segundo vínculo)
+    cli.id AS id_cliente,
+    cli.nome AS nome_cliente,
+    cli.telefone AS telefone_cliente
+
+FROM ORDEM_SERVICO os
+-- 1º JOIN: Conecta a Ordem de Serviço ao Equipamento correspondente
+INNER JOIN EQUIPAMENTO eq ON os.equipamento_id = eq.id
+
+-- 2º JOIN: Conecta o Equipamento ao Cliente dono do equipamento
+INNER JOIN CLIENTE cli ON eq.cliente_id = cli.id;

@@ -1,0 +1,255 @@
+// ### Introdução ao Uso de Dropdowns (<select>) com Chave Estrangeira
+
+Ao construir sistemas que envolvem relacionamentos no banco de dados (como um Produto que pertence a uma Categoria), o usuário não deve digitar o ID da categoria manualmente. 
+
+Para resolver isso, utilizamos a tag `<select>` no frontend:
+1. O frontend faz uma busca (GET) das categorias cadastradas.
+2. Exibimos o nome da categoria para o usuário (`<option>Eletrônicos</option>`).
+3. O valor do elemento (`value`) armazena o ID correspondente (`value="1"`).
+4. Ao salvar, o ID selecionado é enviado no corpo da requisição (POST) como Chave Estrangeira (`categoria_id`).
+
+// ### Modelagem do Banco de Dados (PostgreSQL)
+
+Criamos a tabela pai (`categoria`) e a tabela filho (`produto`), onde `categoria_id` faz a referência (Foreign Key) para a tabela pai.
+
+CREATE TABLE categoria (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE produto (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(255) NOT NULL,
+    preco NUMERIC(10, 2) NOT NULL,
+    categoria_id INTEGER NOT NULL REFERENCES categoria(id) ON DELETE CASCADE
+);
+
+-- Popula o banco com categorias iniciais para os testes
+INSERT INTO categoria (nome) VALUES ('Eletrônicos'), ('Móveis'), ('Vestuário');
+
+// ### Backend (Fastify + Postgres)
+
+O backend possui duas rotas principais: uma para listar as categorias (preenchimento do dropdown) e outra para salvar o produto recebendo a chave estrangeira.
+
+import Fastify from 'fastify'
+import { Pool } from 'pg'
+import cors from '@fastify/cors'
+
+const servidor = Fastify()
+
+// Habilita requisições do frontend
+servidor.register(cors, { origin: '*' })
+
+const sql = new Pool({
+    user: 'postgres',
+    password: '123',
+    host: 'localhost',
+    port: 5432,
+    database: 'loja'
+})
+
+// GET: Retorna a lista de categorias para preencher o <select> no frontend
+servidor.get('/categorias', async (request, reply) => {
+    const resultado = await sql.query('SELECT * FROM categoria')
+    return resultado.rows
+})
+
+// POST: Cadastra o produto salvando a Chave Estrangeira (categoria_id)
+servidor.post('/produtos', async (request, reply) => {
+    const { nome, preco, categoria_id } = request.body
+
+    if (!nome || !preco || !categoria_id) {
+        return reply.status(400).send({ message: "Nome, preço e categoria são obrigatórios!" })
+    }
+
+    await sql.query(
+        'INSERT INTO produto (nome, preco, categoria_id) VALUES ($1, $2, $3)',
+        [nome, preco, categoria_id]
+    )
+
+    reply.status(201).send({ message: 'Produto cadastrado com sucesso!' })
+})
+
+servidor.listen({ port: 3000 })
+
+// ### Frontend em JavaScript Puro (HTML + Vanilla JS)
+
+Preenchemos as opções do `<select>` dinamicamente assim que a página é carregada utilizando `fetch` e `forEach`.
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastro de Produto</title>
+</head>
+<body>
+
+    <h2>Cadastrar Produto</h2>
+    <form id="formProduto" onsubmit="cadastrarProduto(event)">
+        <input type="text" id="nome" placeholder="Nome do Produto" required>
+        <br><br>
+        <input type="number" id="preco" step="0.01" placeholder="Preço" required>
+        <br><br>
+
+        <!-- Campo Select preenchido dinamicamente via JavaScript -->
+        <label for="selectCategoria">Categoria:</label>
+        <select id="selectCategoria" required>
+            <option value="">Selecione uma categoria...</option>
+        </select>
+        <br><br>
+
+        <button type="submit">Cadastrar</button>
+    </form>
+
+    <script>
+        const URL = 'http://localhost:3000'
+
+        // Busca as categorias na API e popula as tags <option> do <select>
+        async function carregarCategorias() {
+            const resposta = await fetch(`${URL}/categorias`)
+            const categorias = await resposta.json()
+
+            const select = document.getElementById('selectCategoria')
+
+            categorias.forEach(categoria => {
+                const option = document.createElement('option')
+                option.value = categoria.id         // ID enviado na chave estrangeira
+                option.textContent = categoria.nome    // Nome exibido na tela
+                select.appendChild(option)
+            })
+        }
+
+        // Submissão do formulário de Cadastro via onsubmit
+        async function cadastrarProduto(e) {
+            e.preventDefault()
+
+            const nome = document.getElementById('nome').value
+            const preco = document.getElementById('preco').value
+            const categoria_id = document.getElementById('selectCategoria').value
+
+            const resposta = await fetch(`${URL}/produtos`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome, preco, categoria_id })
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+            document.getElementById('formProduto').reset()
+        }
+
+        // Executa o carregamento das opções ao abrir a página
+        carregarCategorias()
+    </script>
+</body>
+</html>
+
+// ### Frontend em React (CadastroProduto.jsx)
+
+No React, utilizamos `useEffect` para carregar o array de categorias na montagem do componente e Mapeamento (`.map()`) para gerar os elementos `<option>`.
+
+import { useState, useEffect } from 'react'
+
+export default function CadastroProduto() {
+    const [nome, setNome] = useState('')
+    const [preco, setPreco] = useState('')
+    const [categoriaId, setCategoriaId] = useState('')
+    const [categorias, setCategorias] = useState([])
+
+    // Executa a busca na API apenas uma vez quando a tela carrega
+    useEffect(() => {
+        buscarCategorias()
+    }, [])
+
+    const buscarCategorias = async () => {
+        const resposta = await fetch('http://localhost:3000/categorias')
+        const dados = await resposta.json()
+        setCategorias(dados)
+    }
+
+    const cadastrarProduto = async (e) => {
+        e.preventDefault()
+
+        if (!categoriaId) {
+            alert('Por favor, selecione uma categoria!')
+            return
+        }
+
+        const resposta = await fetch('http://localhost:3000/produtos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                nome, 
+                preco: parseFloat(preco), 
+                categoria_id: categoriaId 
+            })
+        })
+
+        const dados = await resposta.json()
+        alert(dados.message)
+
+        // Limpa os campos após o cadastro
+        setNome('')
+        setPreco('')
+        setCategoriaId('')
+    }
+
+    return (
+        <div>
+            <h2>Cadastrar Produto</h2>
+            <form onSubmit={cadastrarProduto}>
+                <input 
+                    type="text" 
+                    placeholder="Nome do Produto" 
+                    value={nome} 
+                    onChange={(e) => setNome(e.target.value)} 
+                    required 
+                />
+                <br /><br />
+
+                <input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="Preço" 
+                    value={preco} 
+                    onChange={(e) => setPreco(e.target.value)} 
+                    required 
+                />
+                <br /><br />
+
+                {/* Dropdown <select> mapeando o estado de categorias */}
+                <select 
+                    value={categoriaId} 
+                    onChange={(e) => setCategoriaId(e.target.value)}
+                    required
+                >
+                    <option value="">-- Selecione uma Categoria --</option>
+                    {categorias.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                            {cat.nome}
+                        </option>
+                    ))}
+                </select>
+                <br /><br />
+
+                <button type="submit">Salvar Produto</button>
+            </form>
+        </div>
+    )
+}
+
+// ### Testes com REST Client (referencias.http)
+
+### Buscar lista de categorias para popular o <select>
+GET http://localhost:3000/categorias
+
+
+### Cadastrar produto enviando a chave estrangeira (categoria_id)
+POST http://localhost:3000/produtos
+Content-Type: application/json
+
+{
+    "nome": "Teclado Mecânico",
+    "preco": 250.00,
+    "categoria_id": 1
+}

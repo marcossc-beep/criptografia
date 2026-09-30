@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro e Login de Usuários</title>
+</head>
+<body>
+
+    <h2>Cadastrar Usuário</h2>
+    <form id="formCadastro">
+        <input type="text" id="cadNome" placeholder="Nome" required>
+        <input type="email" id="cadEmail" placeholder="E-mail" required>
+        <input type="password" id="cadSenha" placeholder="Senha" required>
+        <button type="button" onclick="cadastrar()">Cadastrar</button>
+    </form>
+
+    <hr>
+
+    <h2>Login</h2>
+    <form id="formLogin">
+        <input type="email" id="loginEmail" placeholder="E-mail" required>
+        <input type="password" id="loginSenha" placeholder="Senha" required>
+        <button type="button" onclick="login()">Entrar</button>
+    </form>
+
+    <hr>
+
+    <h2>Lista de Usuários</h2>
+    <div id="lista"></div>
+
+    <script>
+        const URL = 'http://localhost:3000'
+
+        async function carregarUsuarios() {
+            const resposta = await fetch(`${URL}/usuarios`)
+            const usuarios = await resposta.json()
+
+            const lista = document.getElementById('lista')
+            lista.innerHTML = ''
+
+            usuarios.forEach(usuario => {
+                lista.innerHTML += `
+                    <div>
+                        <p><strong>ID:</strong> ${usuario.id} | <strong>Nome:</strong> ${usuario.nome} | <strong>Email:</strong> ${usuario.email}</p>
+                        <button onclick="editarUsuario(${usuario.id})">Editar</button>
+                        <button onclick="deletarUsuario(${usuario.id})">Deletar</button>
+                        <hr>
+                    </div>
+                `
+            })
+        }
+
+        async function cadastrar() {
+            const nome = document.getElementById('cadNome').value
+            const email = document.getElementById('cadEmail').value
+            const senha = document.getElementById('cadSenha').value
+
+            if (!nome || !email || !senha) {
+                alert('Preencha todos os campos!')
+                return
+            }
+
+            const resposta = await fetch(`${URL}/usuarios`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome, email, senha })
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+
+            document.getElementById('formCadastro').reset()
+            carregarUsuarios()
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value
+            const senha = document.getElementById('loginSenha').value
+
+            if (!email || !senha) {
+                alert('Preencha e-mail e senha!')
+                return
+            }
+
+            const resposta = await fetch(`${URL}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, senha })
+            })
+
+            const dados = await resposta.json()
+
+            if (resposta.ok) {
+                alert(`Login realizado com sucesso! Token: ${dados.token}`)
+                localStorage.setItem('token', dados.token)
+            } else {
+                alert(dados.message || dados.error)
+            }
+
+            document.getElementById('formLogin').reset()
+        }
+
+        async function deletarUsuario(id) {
+            const resposta = await fetch(`${URL}/usuarios/${id}`, {
+                method: 'DELETE'
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+            carregarUsuarios()
+        }
+
+        async function editarUsuario(id) {
+            const novoNome = prompt('Digite o novo nome:')
+            const novoEmail = prompt('Digite o novo email:')
+            const novaSenha = prompt('Digite a nova senha:')
+
+            if (!novoNome || !novoEmail || !novaSenha) {
+                alert('Todos os campos são obrigatórios para editar!')
+                return
+            }
+
+            const resposta = await fetch(`${URL}/usuarios/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nome: novoNome, email: novoEmail, senha: novaSenha })
+            })
+
+            const dados = await resposta.json()
+            alert(dados.message)
+            carregarUsuarios()
+        }
+
+        carregarUsuarios()
+    </script>
+</body>
+</html>

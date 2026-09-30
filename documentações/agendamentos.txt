@@ -1,0 +1,89 @@
+// ### Introdução a Datas e Query Parameters
+
+Trabalhar com agendamentos e horários exige dois conceitos fundamentais:
+1. Formato de Data (ISO 8601): Enviamos datas entre o frontend e a API usando o padrão 'YYYY-MM-DDTHH:mm:ss' (Exemplo: '2026-06-29T18:00:00'). O 'T' separa a data da hora.
+2. Query Parameters (request.query): Parâmetros opcionais enviados na URL após o sinal de interrogação '?' usados para filtros e buscas (Exemplo: '/reunioes?dataInicio=2026-06-01T18:00:00&dataFim=2026-06-30T20:00:00').
+
+// ### Criação da Tabela no PostgreSQL
+
+CREATE TABLE REUNIOES (
+	id SERIAL PRIMARY KEY,
+	titulo VARCHAR(255) NOT NULL,
+	descricao TEXT,
+	nome_organizador VARCHAR(255),
+	data_inicio TIMESTAMP NOT NULL,
+	data_fim TIMESTAMP NOT NULL,
+	criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+// ### Configuração do Servidor Fastify e Conexão com o Postgres
+
+import Fastify from 'fastify'
+import { Pool } from 'pg'
+
+const servidor = Fastify()
+
+const sql = new Pool({
+    user: 'marcos',
+    password: '12345',
+    host: 'localhost',
+    port: 5432,
+    database: 'datas'
+})
+
+async function testBD () {
+    const reunioes = await sql.query('select * from reunioes')
+    console.log(reunioes.rows);
+}
+testBD()
+
+// ### Rota GET: Filtro de Reuniões por Data (Query Params)
+
+servidor.get('/reunioes', async (request, reply) => {
+    // Captura os parâmetros passados na URL (?dataInicio=...&dataFim=...)
+    const dataInicio = request.query.dataInicio
+    const dataFim = request.query.dataFim
+
+    // Busca no banco onde a data_inicio esteja no intervalo selecionado
+    const reunioes = await sql.query(
+        'SELECT * FROM reunioes WHERE data_inicio >= $1 AND data_fim <= $2 ORDER BY criado_em DESC', 
+        [dataInicio, dataFim]
+    )
+
+    // Retorna apenas a lista de registros (.rows)
+    return reunioes.rows
+})
+
+// ### Rota POST: Criar Agendamento
+
+servidor.post('/reunioes', async (request, reply) => {
+    const body = request.body
+
+    const querySql = 'INSERT INTO reunioes (titulo, descricao, nome_organizador, data_inicio, data_fim) VALUES ($1, $2, $3, $4, $5)'
+    const valores = [body.titulo, body.descricao, body.nome_organizador, body.data_inicio, body.data_fim]
+    
+    await sql.query(querySql, valores)
+    reply.status(201).send({ message: 'Agendamento criado com sucesso!' })
+})
+
+servidor.listen({
+    port: 3000
+})
+
+// ### Testes de Requisições no arquivo referencias.http
+
+### Buscar reuniões filtrando por data de início e fim
+GET http://localhost:3000/reunioes?dataInicio=2026-06-01T18:00:00&dataFim=2026-06-30T20:00:00               
+
+
+### Cadastrar uma nova reunião
+POST http://localhost:3000/reunioes
+Content-Type: application/json
+
+{
+    "titulo": "obsessão",
+    "descricao": "via catarina",
+    "nome_organizador": "malu e helena",
+    "data_inicio": "2026-06-29T18:00:00",
+    "data_fim": "2026-06-29T20:00:00"
+}
